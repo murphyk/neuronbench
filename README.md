@@ -12,6 +12,16 @@ NeuronBench ships in **deterministic** and **stochastic** (Fox–Lu channel-nois
 of Hodgkin–Huxley worlds, an intervention API under a hard budget, an evaluator, and a
 **reference baseline LLM agent**.
 
+### Interactive demo
+
+**[Patch](https://claude.ai/code/artifact/2848d02d-cdc1-4c1c-99fe-c0034e9714fb)** — a playable
+front end for the deterministic benchmark: pick a mystery cell, spend a budget of experiments
+(the 9-protocol menu, custom steps, and the four channel blockers), read off the test-window
+spike count, work out the hidden mechanism, then forecast the held-out interventions and score
+yourself. The whole thing runs in the browser from a faithful port of `worlds.py` — see
+[`app/patch.html`](app/patch.html) (self-contained, validated against the Python model to the
+spike).
+
 ---
 
 ## How it works
