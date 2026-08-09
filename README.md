@@ -125,7 +125,36 @@ det = world.score_detection(agent_thinks_there_is_a_novel_current)
 `world.simulate(mechanism, protocol, block=...)` is the **forward model** a solver uses to score
 its *own* candidate hypotheses; it consumes no budget and never touches the true cell.
 `world.run(...)` is the **oracle**: it runs the hidden true cell (with a hidden RNG, so repeats
-are genuinely independent) and returns only a noisy, partial observation.
+are genuinely independent) and returns a partial observation.
+
+### What an observation contains — raw trace + a provided reduction
+
+`world.run(design)` returns an `Observation` carrying **both** the raw membrane-voltage trace and its
+provided reduction, and the solver decides which to use:
+
+```python
+obs = world.run(world.discriminator())
+obs.voltage       # the (sub-sampled) membrane-potential trace V(t): noisy if stochastic, noiseless if not
+obs.obs_idx       # its sample indices;  obs.test_start = where the scored test window begins
+obs.spike_count   # the PROVIDED reduction  spikes(obs)  — action-potential count in the test window
+```
+
+A solver may reduce the trace to `obs.spike_count` (what the LLM baselines use — they are shown only
+`"- <protocol> -> <count> spikes"` lines), or model the raw `obs.voltage` directly (e.g. a particle-filter
+or feature likelihood, useful for the sub-threshold *shape* worlds). **The LLM is only ever shown the
+spike-count reduction, never the trace** — reducing vs. modelling the trace is the solver's choice, and the
+benchmark scores the spike count either way.
+
+So the loop an agent runs is, conceptually:
+
+```python
+state = init(world.problem())                       # opaque prior + protocols + budget (no truth)
+for _ in range(budget):
+    design = state.choose_design()                  # the agent may use an LLM internally here
+    obs    = world.run(design)                      # -> Observation(voltage, spike_count = spikes(voltage))
+    state  = state.update(design, obs)              # use obs.spike_count and/or obs.voltage
+p_of_m, forecasts = state.finish()                  # posterior over the agent's OWN hypotheses + predictions
+```
 
 ---
 

@@ -23,10 +23,18 @@ from . import agent, blockers, evaluator, features, protocols, stochastic, world
 from .worlds import WORLDS, Chan, world_models
 from .stochastic import DT, SIG_OBS
 
-__all__ = ["load_world", "World", "Observation", "list_worlds",
+__all__ = ["load_world", "World", "Observation", "list_worlds", "spikes",
            "worlds", "stochastic", "features", "protocols", "blockers", "evaluator", "agent", "Chan"]
 
 __version__ = "0.1.0"
+
+_SUB = 10          # deterministic voltage is returned sub-sampled by this factor (dt 0.01 -> ~0.1 ms)
+
+
+def spikes(obs):
+    """The provided reduction of a raw trace to the scored scalar: the test-window spike count of an
+    ``Observation``. A solver may call this, or ignore it and model the raw ``obs.voltage`` directly."""
+    return obs.spike_count
 
 
 def list_worlds():
@@ -36,16 +44,20 @@ def list_worlds():
 
 @dataclass
 class Observation:
-    """The result of running one (or `reps`) experiment(s). `spike_count` is the scored observable (the
-    test-window spike count, averaged over reps). For stochastic worlds `voltage` is the noisy
-    sub-sampled trace at `obs_idx`; for deterministic worlds those are None. `cost` is the budget
-    consumed (= reps)."""
+    """The result of running one (or `reps`) experiment(s) --- the raw observable plus the provided
+    reduction. `voltage` is the (sub-sampled) membrane-potential trace the recording actually yields:
+    noisy in the stochastic benchmark, noiseless in the deterministic one. `spike_count` is the
+    provided reduction ``spikes(voltage)`` in the scored test window --- the scalar the benchmark
+    scores --- but a solver is free to use the raw `voltage` instead (e.g. a particle-filter or feature
+    likelihood). `obs_idx` are the sample times of `voltage`; `test_start` indexes where the scored test
+    window begins in `voltage`. `cost` is the budget consumed (= reps)."""
     protocol_label: str
     spike_count: float
     reps: int
     cost: int
     voltage: np.ndarray | None = None
     obs_idx: np.ndarray | None = None
+    test_start: int | None = None
 
 
 @dataclass
@@ -150,9 +162,14 @@ class World:
             V = stochastic.run_particles(reps, I, self._truth_kwargs, self.n_channels, self._rng, block=block)
             noisy = V[0][obs_idx] + self._rng.normal(0.0, SIG_OBS, len(obs_idx))
             cnt = float(features.spike_count(V, ts).mean())
-            return Observation(lab, cnt, reps, reps, voltage=noisy, obs_idx=obs_idx)
-        cnt = float(worlds.spikes(self._truth_kwargs, seg, block=block))
-        return Observation(lab, cnt, reps, reps)
+            ts_obs = int(np.searchsorted(obs_idx, ts))          # test-window start in the sub-sampled trace
+            return Observation(lab, cnt, reps, reps, voltage=noisy, obs_idx=obs_idx, test_start=ts_obs)
+        # deterministic: the raw observable is the noiseless voltage trace; spike_count is its reduction
+        I, ts = worlds.build_I(seg)
+        cnt, V = worlds.simulate(I, ts, **self._truth_kwargs, block=block, trace=True)
+        idx = np.arange(0, len(V), _SUB)                        # ~0.1 ms sampling of the trace
+        return Observation(lab, float(cnt), reps, reps, voltage=V[idx].astype(float),
+                           obs_idx=idx, test_start=int(np.searchsorted(idx, ts)))
 
     # -- open-ended scoring --
     def forecast_mse(self, predicted_test_counts, floor=evaluator.MSE_FLOOR):

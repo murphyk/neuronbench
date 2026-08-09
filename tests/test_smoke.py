@@ -46,6 +46,19 @@ def test_stochastic_observation_shape():
     assert o.voltage.ndim == 1
 
 
+def test_run_returns_trace_and_reduction():
+    """run() always yields the raw voltage trace + its spike-count reduction, deterministic or stochastic;
+    spikes(obs) recovers the scored scalar and the count matches counting crossings in the trace's window."""
+    for stoch in (False, True):
+        w = nb.load_world("ca_rebound", stochastic=stoch, seed=0)
+        o = w.run(w.discriminator())
+        assert o.voltage is not None and o.voltage.ndim == 1 and o.test_start is not None
+        assert nb.spikes(o) == o.spike_count
+        if not stoch:   # deterministic trace: reduction is exact
+            V = o.voltage[None, :]
+            assert nb.features.spike_count(V, o.test_start)[0] == o.spike_count
+
+
 def test_ttx_silences_spikes():
     """TTX (block base Na) abolishes spiking for every world under a strong step."""
     strong = nb.protocols.by_label("strong step (18 uA, 120 ms)")
