@@ -22,12 +22,10 @@ def test_deterministic_revelation_and_silence():
             assert w.simulate(plain, brief) == w.simulate(alt, brief), name
 
 
-def test_perfect_forecast_and_recovery_are_zero():
+def test_perfect_forecast_is_zero():
     w = nb.load_world("ca_rebound", stochastic=False, seed=0)
-    # a perfect forecaster (submitting the true counts) scores 0 on both the held-out and full-pool metrics
+    # a perfect forecaster (submitting the true held-out counts) scores 0 on the single metric
     assert w.forecast_mse(nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
-    assert w.recovery_mse(nb.evaluator.battery_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
-    assert w.has_latent and w.score_detection(True) == 1 and w.score_detection(False) == 0
 
 
 def test_problem_is_leak_free():

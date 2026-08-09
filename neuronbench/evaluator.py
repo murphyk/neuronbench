@@ -13,7 +13,7 @@ import zlib
 
 import numpy as np
 
-from .worlds import WORLDS, POOL, world_models, spikes as _det_spikes, build_I as _build_I
+from .worlds import WORLDS, world_models, spikes as _det_spikes, build_I as _build_I
 from .stochastic import run_particles as _stoch_run, DT
 from .features import spike_count as _spike_count
 
@@ -53,48 +53,8 @@ def forecast_mse(predictions, targets, floor=MSE_FLOOR):
     return float(max(np.mean(err ** 2) - floor, 0.0))
 
 
-def has_latent(world):
-    """Whether the true cell has a latent extra mechanism beyond the plain Na+K+leak spiker. True for
-    all six worlds as shipped; a plain-null world (truth == plain) would return False, making the
-    presence/absence of a latent mechanism a genuine open-ended decision."""
-    return True
-
-
-def battery_targets(world, stochastic=False, N=100.0, seed=0, reps=200):
-    """Ground-truth expected test-window spike counts for the true cell over the FULL design pool (all
-    9 protocols) -- a comprehensive behavioural fingerprint used to score how well a submitted model
-    *recovers* the mechanism (behavioural equivalence), as opposed to the held-out forecast."""
-    _, truth_kw = true_mechanism(world)
-    out = {}
-    for lab, seg in POOL:
-        if stochastic:
-            I, ts = _build_I(seg, dt=DT)
-            rng = np.random.default_rng(seed + zlib.crc32(lab.encode()) % 10_000)
-            V = _stoch_run(reps, I, truth_kw, N, rng, DT)
-            out[lab] = float(_spike_count(V, ts).mean())
-        else:
-            out[lab] = float(_det_spikes(truth_kw, seg))
-    return out
-
-
-def recovery_mse(predictions, world, stochastic=False, N=100.0, seed=0, floor=MSE_FLOOR):
-    """Behavioural model-recovery: floored MSE of the submitted model's predicted spike counts against
-    the true cell over the FULL design pool. Near-zero means the agent's argmax model is behaviourally
-    equivalent to the truth (it recovered the mechanism), even if expressed in the agent's own terms --
-    the metric that lets an OPEN-ended `argmax_m p(m|D)` be compared to the truth without a shared label.
-    `predictions` is a {protocol_label: count} dict spanning the pool."""
-    targets = battery_targets(world, stochastic=stochastic, N=N, seed=seed)
-    return forecast_mse(predictions, targets, floor=floor)
-
-
-# -- deprecated two-hypothesis conveniences (kept for backward compatibility; prefer the open-ended
-#    forecast_mse + recovery_mse + has_latent above) --
-def selection_correct(chosen_name, world):
-    """DEPRECATED (two-hypothesis framing). 1 if `chosen_name` matches the world's true mechanism name."""
-    return int(chosen_name == WORLDS[world]["name"])
-
-
-def selection_brier(prob_true):
-    """DEPRECATED (two-hypothesis framing). Brier score (1 - prob_true)^2 for the mass on the truth."""
-    p = float(np.clip(prob_true, 0.0, 1.0))
-    return (1.0 - p) ** 2
+# The held-out interventional forecast MSE (above) is the benchmark's single evaluation metric. Earlier
+# two-hypothesis conveniences (selection accuracy/Brier) and the full-pool behavioural-recovery MSE were
+# removed: the task is open-ended, and held-out forecasting on the discriminating test protocols already
+# captures whether the agent recovered the mechanism -- a separate recovery metric was weaker (diluted by
+# the textbook protocols where every mechanism agrees) and largely redundant.

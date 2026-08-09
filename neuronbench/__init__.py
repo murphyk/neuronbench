@@ -171,42 +171,16 @@ class World:
         return Observation(lab, float(cnt), reps, reps, voltage=V[idx].astype(float),
                            obs_idx=idx, test_start=int(np.searchsorted(idx, ts)))
 
-    # -- open-ended scoring --
+    # -- evaluation (a single open-ended metric) --
     def forecast_mse(self, predicted_test_counts, floor=evaluator.MSE_FLOOR):
-        """PRIMARY metric. Floored MSE of the agent's predicted held-out test-window spike counts
-        (a {label: count} dict over ``test_protocol_labels``) against the true cell. Fully open-ended:
-        the agent may reach it with any model form it likes."""
+        """The benchmark's sole metric: floored MSE of the agent's predicted held-out test-window spike
+        counts (a {label: count} dict over ``test_protocol_labels``) against the true cell. Fully
+        open-ended -- the agent may reach it with any model form -- and it doubles as the model-recovery
+        score, since the held-out test protocols are the discriminating regime: only a model that
+        recovered the mechanism forecasts them well."""
         targets = evaluator.held_out_targets(self.name, stochastic=self.stochastic,
                                              N=self.n_channels, seed=self.seed)
         return evaluator.forecast_mse(predicted_test_counts, targets, floor=floor)
-
-    def recovery_mse(self, pool_predictions, floor=evaluator.MSE_FLOOR):
-        """Behavioural model-recovery: floored MSE of the agent's argmax model over the FULL design pool
-        (a {label: count} dict spanning ``problem()['protocols']``) vs the true cell. Near-zero means the
-        agent's best model is behaviourally equivalent to the truth -- how an OPEN-ended ``argmax_m
-        p(m|D)`` is compared to the truth without a shared model label."""
-        return evaluator.recovery_mse(pool_predictions, self.name, stochastic=self.stochastic,
-                                      N=self.n_channels, seed=self.seed, floor=floor)
-
-    @property
-    def has_latent(self):
-        """Whether the true cell has a latent extra mechanism (True for all shipped worlds; a plain-null
-        world would be False)."""
-        return evaluator.has_latent(self.name)
-
-    def score_detection(self, agent_says_latent):
-        """1 if the agent correctly decided whether a latent mechanism is present (open-ended
-        presence/absence detection), else 0."""
-        return int(bool(agent_says_latent) == self.has_latent)
-
-    # -- deprecated two-hypothesis conveniences --
-    def selection_correct(self, chosen_name):
-        """DEPRECATED. 1 if `chosen_name` matches the (hidden) true mechanism name."""
-        return evaluator.selection_correct(chosen_name, self.name)
-
-    def selection_brier(self, prob_true):
-        """DEPRECATED. Brier score for the posterior mass placed on the true mechanism."""
-        return evaluator.selection_brier(prob_true)
 
 
 def load_world(name, stochastic=True, n_channels=100.0, seed=0):
