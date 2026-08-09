@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .blockers import resolve as _resolve_blockers
+
 ENa, EK, EL = 50.0, -77.0, -54.4
 
 
@@ -70,10 +72,13 @@ def build_I(segments, dt=0.01, base=20.0, tail=80.0):
 
 
 def simulate(I, test_start, extra=(), gNa=120.0, gK=36.0, gL=0.3, slow_na=False, dt=0.01, V0=-65.0,
-             trace=False):
+             trace=False, block=()):
     """Integrate base Na/K/leak (+ optional slow Na inactivation) plus `extra` channels; return the spike
     count in the test window [test_start:]. If ``trace=True``, also return the full voltage trace as
-    ``(cnt, V)`` with ``V`` a length-``len(I)`` array (for qualitative visualisation)."""
+    ``(cnt, V)`` with ``V`` a length-``len(I)`` array (for qualitative visualisation). `block` is an
+    iterable of channel-blocker drug names (see ``blockers``); TTX zeros base Na, TEA base K, Cd the
+    Ca2+-type extra channels, XE991 the M-current."""
+    gNa, gK, extra = _resolve_blockers(block, gNa, gK, extra)
     n = len(I); v = V0
     am, bm, ah, bh, an, bn = _ab(v)
     m = am / (am + bm); h = ah / (ah + bh); nn = an / (an + bn)
@@ -230,9 +235,9 @@ def world_models(w):
     return {"Na+K (plain)": dict(extra=[], slow_na=False), spec["name"]: dict(**spec["alt"])}
 
 
-def spikes(kwargs, segments, dt=0.01):
+def spikes(kwargs, segments, dt=0.01, block=()):
     I, ts = build_I(segments, dt=dt)
-    return simulate(I, ts, **kwargs, dt=dt)
+    return simulate(I, ts, **kwargs, dt=dt, block=block)
 
 
 def _selftest():

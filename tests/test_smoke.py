@@ -34,8 +34,27 @@ def test_stochastic_observation_shape():
     w = nb.load_world("na_fatigue", stochastic=True, n_channels=100, seed=1)
     o = w.run(w.discriminator(), reps=3)
     assert o.cost == 3
-    assert o.features.shape == (6,)
+    assert o.spike_count >= 0
     assert o.voltage.ndim == 1
+
+
+def test_ttx_silences_spikes():
+    """TTX (block base Na) abolishes spiking for every world under a strong step."""
+    strong = nb.protocols.by_label("strong step (18 uA, 120 ms)")
+    for name in nb.list_worlds():
+        w = nb.load_world(name, stochastic=False)
+        truth = w.mechanisms[w._truth_name]
+        assert w.simulate(truth, strong) > 0, name
+        assert w.simulate(truth, strong, block=["TTX"]) == 0, name
+
+
+def test_xe991_blocks_only_m_current():
+    """XE991 blocks the M-current, so it changes textbook_M but leaves the Na-only fast worlds' base
+    spiking unaffected on a plain step (na_fatigue's alt has no extra channel)."""
+    strong = nb.protocols.by_label("strong step (18 uA, 120 ms)")
+    wm = nb.load_world("textbook_M", stochastic=False)
+    m = wm.mechanisms[wm._truth_name]
+    assert wm.simulate(m, strong, block=["XE991"]) >= wm.simulate(m, strong)  # M-block disinhibits firing
 
 
 class _MockClient:

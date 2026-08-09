@@ -19,12 +19,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from . import agent, evaluator, features, protocols, stochastic, worlds
+from . import agent, blockers, evaluator, features, protocols, stochastic, worlds
 from .worlds import WORLDS, Chan, world_models
 from .stochastic import DT, SIG_OBS
 
 __all__ = ["load_world", "World", "Observation", "list_worlds",
-           "worlds", "stochastic", "features", "protocols", "evaluator", "agent", "Chan"]
+           "worlds", "stochastic", "features", "protocols", "blockers", "evaluator", "agent", "Chan"]
 
 __version__ = "0.1.0"
 
@@ -36,16 +36,16 @@ def list_worlds():
 
 @dataclass
 class Observation:
-    """The result of running one (or `reps`) experiment(s). For stochastic worlds `voltage` is the
-    noisy sub-sampled trace and `features` is the mean feature vector s(y); for deterministic worlds
-    those are None and only `spike_count` is populated. `cost` is the budget consumed (= reps)."""
+    """The result of running one (or `reps`) experiment(s). `spike_count` is the scored observable (the
+    test-window spike count, averaged over reps). For stochastic worlds `voltage` is the noisy
+    sub-sampled trace at `obs_idx`; for deterministic worlds those are None. `cost` is the budget
+    consumed (= reps)."""
     protocol_label: str
     spike_count: float
     reps: int
     cost: int
     voltage: np.ndarray | None = None
     obs_idx: np.ndarray | None = None
-    features: np.ndarray | None = None
 
 
 @dataclass
@@ -106,31 +106,30 @@ class World:
     def _truth_kwargs(self):
         return world_models(self.name)[self._truth_name]
 
-    def simulate(self, mechanism, protocol, reps=1, rng=None):
+    def simulate(self, mechanism, protocol, reps=1, rng=None, block=()):
         """Forward model for an arbitrary hypothesis `mechanism` ({extra:[Chan], slow_na:bool}) under
-        a protocol (label, segments). Returns the (reps, T) voltage array (stochastic) or the spike
-        count (deterministic). This is the generative model a solver uses to score its own hypotheses
-        -- it does not consume budget and does not touch the true cell."""
+        a protocol (label, segments), optionally with channel blockers. Returns the (reps, T) voltage
+        array (stochastic) or the spike count (deterministic). This is the generative model a solver
+        uses to score its own hypotheses -- it does not consume budget and does not touch the true cell."""
         _, seg = protocol
         if self.stochastic:
             I, obs_idx, ts = stochastic.make_protocol(seg)
             rng = rng if rng is not None else np.random.default_rng()
-            return stochastic.run_particles(reps, I, mechanism, self.n_channels, rng)
-        return worlds.spikes(mechanism, seg)
+            return stochastic.run_particles(reps, I, mechanism, self.n_channels, rng, block=block)
+        return worlds.spikes(mechanism, seg, block=block)
 
-    def run(self, protocol, reps=1):
-        """Run the hidden TRUE cell under a protocol (label, segments) `reps` times and return a noisy,
-        partial Observation. Consumes `reps` units of budget. Uses the world's hidden RNG, so repeated
-        calls are genuinely independent noisy experiments."""
+    def run(self, protocol, reps=1, block=()):
+        """Run the hidden TRUE cell under a protocol (label, segments) `reps` times, optionally applying
+        channel blockers, and return a noisy, partial Observation. Consumes `reps` units of budget. Uses
+        the world's hidden RNG, so repeated calls are genuinely independent noisy experiments."""
         lab, seg = protocol
         if self.stochastic:
             I, obs_idx, ts = stochastic.make_protocol(seg)
-            V = stochastic.run_particles(reps, I, self._truth_kwargs, self.n_channels, self._rng)
+            V = stochastic.run_particles(reps, I, self._truth_kwargs, self.n_channels, self._rng, block=block)
             noisy = V[0][obs_idx] + self._rng.normal(0.0, SIG_OBS, len(obs_idx))
-            feat = features.feature_vector(V, ts).mean(axis=0)
             cnt = float(features.spike_count(V, ts).mean())
-            return Observation(lab, cnt, reps, reps, voltage=noisy, obs_idx=obs_idx, features=feat)
-        cnt = float(worlds.spikes(self._truth_kwargs, seg))
+            return Observation(lab, cnt, reps, reps, voltage=noisy, obs_idx=obs_idx)
+        cnt = float(worlds.spikes(self._truth_kwargs, seg, block=block))
         return Observation(lab, cnt, reps, reps)
 
     # -- scoring --
