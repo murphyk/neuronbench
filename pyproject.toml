@@ -1,0 +1,36 @@
+[project]
+name = "neuronbench"
+version = "0.1.0"
+description = "NeuronBench — a partially observed single-neuron electrophysiology benchmark for mechanism discovery (deterministic + stochastic Hodgkin–Huxley)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Kevin Murphy" }]
+keywords = ["benchmark", "electrophysiology", "hodgkin-huxley", "mechanism-discovery", "active-learning", "scientific-discovery"]
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[project.optional-dependencies]
+# The reference baseline LLM agent needs an OpenAI-compatible client (OpenRouter works).
+# It is injected as a callable, so this is optional — you can bring your own LLM.
+llm = ["openai>=1.0"]
+plots = ["matplotlib"]
+dev = ["pytest"]
+
+[project.urls]
+# TODO: fill in once the GitHub repo exists.
+Homepage = "https://github.com/murphyk/neuronbench"
+Source = "https://github.com/murphyk/neuronbench"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["neuronbench*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
