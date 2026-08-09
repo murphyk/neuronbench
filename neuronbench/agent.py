@@ -40,10 +40,10 @@ def choose_experiment(world, observed, remaining, client):
 
     `world` is a neuronbench.World; `remaining` is a list of (label, segments)."""
     labels = [lab for lab, _ in remaining]
-    truth = world._truth_name
     obs_txt = ("\n".join(f"  - {l} -> {c} spikes" for l, c in observed) if observed else "  (none yet)")
     prompt = ("A single-compartment neuron under current clamp; we count action potentials per protocol. "
-              f"It is either a plain Na+K spiker or '{truth}', which adds {world.text_prior}.\n"
+              "It is a plain Na+K spiker, possibly plus one additional membrane current you must identify: "
+              f"{world.text_prior}.\n"
               "Experiments run so far and their observed spike counts:\n" + obs_txt +
               "\n\nAvailable experiments (choose one; each may be run once):\n"
               + "\n".join(f"  - {lab}" for lab in labels)
@@ -66,10 +66,10 @@ def forecast_counts(world, observed, client):
     ``world.forecast_mse``. On a parse failure, predicts each test count as the mean observed count
     (or 0 if nothing observed)."""
     test = world.test_protocols
-    truth = world._truth_name
     obs_txt = ("\n".join(f"  - {l} -> {c} spikes" for l, c in observed) if observed else "  (none yet)")
     prompt = ("A single-compartment neuron under current clamp; we count action potentials per protocol. "
-              f"It is either a plain Na+K spiker or '{truth}', which adds {world.text_prior}. "
+              "It is a plain Na+K spiker, possibly plus one additional membrane current of unknown identity: "
+              f"{world.text_prior}. "
               "Experiments run and observed spike counts:\n" + obs_txt +
               "\n\nPredict the spike count for each held-out protocol:\n"
               + "\n".join(f"  {i+1}. {lab}" for i, (lab, _) in enumerate(test))

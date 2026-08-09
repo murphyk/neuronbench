@@ -79,9 +79,31 @@ class World:
         return WORLDS[self.name]["textbook"]
 
     @property
+    def reference_model(self):
+        """The familiar reference mechanism the agent starts from: plain Na+K+leak
+        (``{extra: [], slow_na: False}``). The task is open-ended -- the true cell may be this, or it may
+        involve a novel current the agent must discover and propose itself; the truth is never exposed."""
+        return {"extra": [], "slow_na": False}
+
+    def problem(self):
+        """The leak-free specification handed to the agent (no ground truth): an opaque text prior, the
+        design pool + held-out test-protocol labels, the reference (plain) model, and the budget rule.
+        The agent runs experiments (``run``), proposes its own hypotheses, and returns a posterior over
+        them plus forecasts -- it is never told the true mechanism or that there are exactly two."""
+        return {
+            "text_prior": self.text_prior,
+            "reference_model": self.reference_model,
+            "protocols": [(lab, seg) for lab, seg in protocols.POOL],
+            "test_protocol_labels": [lab for lab, _ in self.test_protocols],
+            "budget_rule": ("each protocol once" if not self.stochastic
+                            else "(protocol, repeats): running r times costs r and averages the noise"),
+        }
+
+    @property
     def mechanisms(self):
-        """The candidate mechanisms {name: kwargs}: plain Na+K+leak vs the world's alternative."""
-        return world_models(self.name)
+        """DEPRECATED (two-hypothesis framing / leaks the truth). Use ``reference_model`` + ``problem()``.
+        Returns only the reference plain model now; the novel mechanism is hidden."""
+        return {"Na+K (plain)": self.reference_model}
 
     @property
     def protocol_pool(self):
@@ -132,20 +154,41 @@ class World:
         cnt = float(worlds.spikes(self._truth_kwargs, seg, block=block))
         return Observation(lab, cnt, reps, reps)
 
-    # -- scoring --
+    # -- open-ended scoring --
     def forecast_mse(self, predicted_test_counts, floor=evaluator.MSE_FLOOR):
-        """Floored MSE of the agent's predicted held-out test-window spike counts (a {label: count}
-        dict) against the true cell."""
+        """PRIMARY metric. Floored MSE of the agent's predicted held-out test-window spike counts
+        (a {label: count} dict over ``test_protocol_labels``) against the true cell. Fully open-ended:
+        the agent may reach it with any model form it likes."""
         targets = evaluator.held_out_targets(self.name, stochastic=self.stochastic,
                                              N=self.n_channels, seed=self.seed)
         return evaluator.forecast_mse(predicted_test_counts, targets, floor=floor)
 
+    def recovery_mse(self, pool_predictions, floor=evaluator.MSE_FLOOR):
+        """Behavioural model-recovery: floored MSE of the agent's argmax model over the FULL design pool
+        (a {label: count} dict spanning ``problem()['protocols']``) vs the true cell. Near-zero means the
+        agent's best model is behaviourally equivalent to the truth -- how an OPEN-ended ``argmax_m
+        p(m|D)`` is compared to the truth without a shared model label."""
+        return evaluator.recovery_mse(pool_predictions, self.name, stochastic=self.stochastic,
+                                      N=self.n_channels, seed=self.seed, floor=floor)
+
+    @property
+    def has_latent(self):
+        """Whether the true cell has a latent extra mechanism (True for all shipped worlds; a plain-null
+        world would be False)."""
+        return evaluator.has_latent(self.name)
+
+    def score_detection(self, agent_says_latent):
+        """1 if the agent correctly decided whether a latent mechanism is present (open-ended
+        presence/absence detection), else 0."""
+        return int(bool(agent_says_latent) == self.has_latent)
+
+    # -- deprecated two-hypothesis conveniences --
     def selection_correct(self, chosen_name):
-        """1 if `chosen_name` is the true mechanism, else 0."""
+        """DEPRECATED. 1 if `chosen_name` matches the (hidden) true mechanism name."""
         return evaluator.selection_correct(chosen_name, self.name)
 
     def selection_brier(self, prob_true):
-        """Two-hypothesis Brier score for the posterior mass placed on the true mechanism."""
+        """DEPRECATED. Brier score for the posterior mass placed on the true mechanism."""
         return evaluator.selection_brier(prob_true)
 
 

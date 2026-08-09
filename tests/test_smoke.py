@@ -13,8 +13,8 @@ def test_deterministic_revelation_and_silence():
     """Every novel world's discriminator separates plain from alt; a textbook step does not."""
     for name in nb.list_worlds():
         w = nb.load_world(name, stochastic=False)
-        plain = w.mechanisms["Na+K (plain)"]
-        alt = w.mechanisms[w._truth_name]
+        plain = w.reference_model
+        alt = w._truth_kwargs            # tests may peek at the hidden truth; agents may not
         disc = w.discriminator()
         assert abs(w.simulate(plain, disc) - w.simulate(alt, disc)) >= 2, name
         if not w.is_control:  # a novel channel is silent under the plain brief step
@@ -22,12 +22,20 @@ def test_deterministic_revelation_and_silence():
             assert w.simulate(plain, brief) == w.simulate(alt, brief), name
 
 
-def test_perfect_forecast_is_zero():
+def test_perfect_forecast_and_recovery_are_zero():
     w = nb.load_world("ca_rebound", stochastic=False, seed=0)
-    targets = nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)
-    assert w.forecast_mse(targets) == 0.0
-    assert w.selection_correct(w._truth_name) == 1
-    assert w.selection_correct("Na+K (plain)") == 0
+    # a perfect forecaster (submitting the true counts) scores 0 on both the held-out and full-pool metrics
+    assert w.forecast_mse(nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
+    assert w.recovery_mse(nb.evaluator.battery_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
+    assert w.has_latent and w.score_detection(True) == 1 and w.score_detection(False) == 0
+
+
+def test_problem_is_leak_free():
+    w = nb.load_world("h_sag", stochastic=False)
+    prob = w.problem()
+    assert set(prob) >= {"text_prior", "reference_model", "protocols", "test_protocol_labels", "budget_rule"}
+    assert prob["reference_model"] == {"extra": [], "slow_na": False}   # only the plain reference is given
+    assert w.mechanisms == {"Na+K (plain)": w.reference_model}          # the novel mechanism is not exposed
 
 
 def test_stochastic_observation_shape():
@@ -43,7 +51,7 @@ def test_ttx_silences_spikes():
     strong = nb.protocols.by_label("strong step (18 uA, 120 ms)")
     for name in nb.list_worlds():
         w = nb.load_world(name, stochastic=False)
-        truth = w.mechanisms[w._truth_name]
+        truth = w._truth_kwargs
         assert w.simulate(truth, strong) > 0, name
         assert w.simulate(truth, strong, block=["TTX"]) == 0, name
 
@@ -53,7 +61,7 @@ def test_xe991_blocks_only_m_current():
     spiking unaffected on a plain step (na_fatigue's alt has no extra channel)."""
     strong = nb.protocols.by_label("strong step (18 uA, 120 ms)")
     wm = nb.load_world("textbook_M", stochastic=False)
-    m = wm.mechanisms[wm._truth_name]
+    m = wm._truth_kwargs
     assert wm.simulate(m, strong, block=["XE991"]) >= wm.simulate(m, strong)  # M-block disinhibits firing
 
 

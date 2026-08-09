@@ -84,39 +84,42 @@ design: running a protocol `r` times costs `r` units and averages the channel no
 
 ---
 
-## Evaluation criteria
+## Evaluation criteria — fully open-ended
 
-An episode is scored on two axes:
+The task is **open-ended**: the agent is given only an opaque prior (a plain Na+K spiker that *may*
+also involve one novel current of unknown identity), the reference plain model, the design pool, and a
+budget. It runs experiments, then **proposes its own hypotheses**, returns a posterior `p(m | D)` over
+them, and forecasts. It is **never told the true mechanism, nor that there are exactly two hypotheses**
+(`world.problem()` is the leak-free spec; the truth is private). It is scored by:
 
-1. **Mechanism selection.** Did the agent identify the true mechanism?
-   - `selection_correct` — 0/1 accuracy of the committed mechanism.
-   - `selection_brier` — `(1 − p_true)²`, the two-hypothesis Brier score for the posterior mass
-     placed on the true mechanism (lower is better; rewards *calibrated* confidence).
+1. **Held-out interventional forecast MSE** *(primary)* — `world.forecast_mse({label: count})` over
+   **test protocols never run**. Floored at 0.25 so irreducible ±0.5-spike noise is treated as exact.
+   Any model form is allowed; a method that recovered the mechanism forecasts interventions it never
+   observed, which a curve-fit to the observed data cannot.
+2. **Behavioural model recovery** — `world.recovery_mse({label: count})` over the **full pool**: how
+   close the agent's `argmax_m p(m|D)` model is to the true cell *behaviourally*. Near-zero means it
+   recovered the mechanism — the metric that lets an open-ended argmax model be compared to the truth
+   **without a shared model label**.
+3. **Latent detection** — `world.score_detection(agent_says_latent)`: did the agent correctly decide
+   whether a latent mechanism is present at all.
 
-2. **Held-out interventional forecasting** *(the headline metric)*. On a disjoint set of
-   **test protocols the agent never ran**, how well does its predicted test-window spike count
-   match the true cell's?
-   - `forecast_mse` — mean squared error between predicted and true spike counts over the
-     held-out protocols, **floored** at 0.25 so irreducible ±0.5-spike noise is treated as
-     exact. Lower is better; a method that has correctly identified the mechanism can forecast
-     interventions it never observed, which a curve-fit to the observed data cannot.
-
-The forecast metric is the one that matters: identifying the mechanism is only useful insofar
-as it lets you predict interventions. A data-efficient discovery method should reach a low
-`forecast_mse` from **few** experiments.
+The forecast metric is the one that matters: identifying the mechanism is only useful insofar as it
+lets you predict interventions. A data-efficient discovery method reaches a low `forecast_mse` from
+**few** experiments.
 
 ```python
 import neuronbench as nb
 
 world = nb.load_world("ca_rebound", stochastic=True, n_channels=100, seed=0)
+spec  = world.problem()   # opaque prior + reference model + protocols + test labels + budget rule (no truth)
 
-# ... an agent runs experiments (each consumes budget) and forms a belief ...
+# ... the agent runs experiments (each consumes budget), proposes hypotheses, forms p(m|D) ...
 obs = world.run(world.discriminator(), reps=3)        # noisy, partial; costs 3
-obs = world.run(nb.protocols.by_label("brief step (12 uA, 40 ms)"), block=["TTX"])
 
-# score it
-acc  = world.selection_correct("Na+K + unidentified current")   # 0/1
-mse  = world.forecast_mse({lab: predicted_count for lab, _ in world.test_protocols})
+# score it (open-ended: forecast is primary; recovery + detection are behavioural)
+mse = world.forecast_mse({lab: predicted_count for lab, _ in world.test_protocols})
+rec = world.recovery_mse({lab: predicted_count for lab, seg in spec["protocols"]})
+det = world.score_detection(agent_thinks_there_is_a_novel_current)
 ```
 
 `world.simulate(mechanism, protocol, block=...)` is the **forward model** a solver uses to score
