@@ -47,7 +47,7 @@ def choose_experiment(world, observed, remaining, client):
               "Experiments run so far and their observed spike counts:\n" + obs_txt +
               "\n\nAvailable experiments (choose one; each may be run once):\n"
               + "\n".join(f"  - {lab}" for lab in labels)
-              + "\n\nWhich ONE experiment best distinguishes the two models next? "
+              + "\n\nWhich ONE experiment best distinguishes the candidate mechanisms next? "
                 'Return exactly {"experiment": "<one label copied verbatim>"}.')
     try:
         txt = client.ask("You are an electrophysiologist choosing the next experiment. Reply with ONLY a JSON object.",
