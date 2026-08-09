@@ -314,7 +314,7 @@ function simulate(I, test_start, mech, block, dt=0.01, V0=-65){
   }
   return {V, cnt, dt, test_start};
 }
-function runProto(mech, segments, block){ const {I,test_start}=buildI(segments); return simulate(I,test_start,mech,block); }
+function runProto(mech, segments, block){ const {I,test_start}=buildI(segments); const sim=simulate(I,test_start,mech,block); sim.I=I; return sim; }
 // interpretable readouts (n_test is the scored one; the rest aid insight)
 function feats(sim){
   const {V, test_start}=sim; let nTest=0, nPre=0, vmin=99, vpk=-99, pv=V[0];
@@ -334,11 +334,11 @@ const TEXTBOOK=[
   ["weak step (5 µA, 120 ms)",    [[120,5]]],
 ];
 const ADVANCED=[
-  ["hyperpol conditioning + depol test (−30/250, +12)", [[250,-30],[150,12]]],
-  ["hyperpol pre-pulse + weak test (−30/250, gap, +6)", [[250,-30],[120,0],[60,6]]],
-  ["paired long pulses (12/300, 60 gap, 12/300)",       [[300,12],[60,0],[300,12]]],
-  ["depol conditioning + test (+15/250, +12)",          [[250,15],[150,12]]],
-  ["brief hyperpol conditioning + test (−30/40, +12)",  [[40,-30],[150,12]]],
+  ["hyperpol conditioning → depol test  (−30 µA/250 ms, then +12 µA)", [[250,-30],[150,12]]],
+  ["hyperpol pre-pulse, gap, weak test  (−30 µA/250 ms → rest → +6 µA)", [[250,-30],[120,0],[60,6]]],
+  ["paired long pulses  (+12 µA/300 ms, gap, +12 µA/300 ms)",       [[300,12],[60,0],[300,12]]],
+  ["depol conditioning → test  (+15 µA/250 ms, then +12 µA)",          [[250,15],[150,12]]],
+  ["brief hyperpol conditioning → test  (−30 µA/40 ms, then +12 µA)",  [[40,-30],[150,12]]],
 ];
 const POOL=TEXTBOOK.concat(ADVANCED);
 const WORLDS={
@@ -399,33 +399,68 @@ function miniTrace(cv,sim){
   const r=Math.min(devicePixelRatio||1,2),W=cv.clientWidth,H=cv.clientHeight;
   cv.width=W*r;cv.height=H*r;const x=cv.getContext("2d");x.scale(r,r);drawTrace(x,W,H,sim,{mini:true});
 }
+// draw the injected current command I(t) as an amber waveform. o.main => fill the plot (preview);
+// otherwise a faint band in the lower third (overlaid under the voltage).
+function drawCurrent(x,geom,I,dt,o){
+  o=o||{}; const {x0,x1,y0,y1}=geom, tMax=I.length*dt;
+  let amin=0,amax=0; for(let i=0;i<I.length;i++){if(I[i]<amin)amin=I[i];if(I[i]>amax)amax=I[i];}
+  const span=Math.max(amax-amin,1), padA=0.18*span, lo=amin-padA, hi=amax+padA, rng=hi-lo;
+  const by0=o.main?y0+6:y1-0.30*(y1-y0), by1=y1;
+  const sx=t=>x0+(t/tMax)*(x1-x0), cy=a=>by1-((a-lo)/rng)*(by1-by0);
+  const amber=gcs('--amber');
+  x.save();
+  x.strokeStyle=amber;x.globalAlpha=.32;x.setLineDash([2,3]);x.lineWidth=1;
+  x.beginPath();x.moveTo(x0,cy(0));x.lineTo(x1,cy(0));x.stroke();x.setLineDash([]);
+  x.globalAlpha=o.main?.95:.55;x.lineWidth=o.main?1.9:1.3;x.lineJoin="round";
+  x.beginPath();let started=false;
+  const step=Math.max(1,Math.floor(I.length/(x1-x0)));
+  for(let i=0;i<I.length;i+=step){const xx=sx(i*dt),yy=cy(I[i]);started?x.lineTo(xx,yy):(x.moveTo(xx,yy),started=true);}
+  x.lineTo(sx(tMax),cy(I[I.length-1]));x.stroke();
+  if(!o.mini){
+    x.globalAlpha=1;x.fillStyle=amber;x.font="9px ui-monospace,monospace";
+    if(o.main){
+      x.textAlign="right";
+      x.fillText(Math.round(amax)+"",x0-4,cy(amax)+3); x.fillText("0",x0-4,cy(0)+3);
+      if(amin<0)x.fillText(Math.round(amin)+"",x0-4,cy(amin)+3);
+      x.textAlign="left";x.fillText("stimulus current I (µA)",x0+2,by0-1);
+    } else { x.textAlign="left";x.fillText("I (µA)",x0+2,by1-3); }
+  }
+  x.restore();
+}
 function drawTrace(x,W,H,sim,opt){
   opt=opt||{}; x.clearRect(0,0,W,H);
   const pad=opt.mini?{l:4,r:4,t:4,b:4}:{l:34,r:12,t:12,b:24};
-  const x0=pad.l,x1=W-pad.r,y0=pad.t,y1=H-pad.b, n=sim.V.length, tMax=n*sim.dt;
-  const vLo=-95,vHi=55;
-  const sx=t=>x0+(t/tMax)*(x1-x0), sy=v=>y1-((v-vLo)/(vHi-vLo))*(y1-y0);
+  const x0=pad.l,x1=W-pad.r,y0=pad.t,y1=H-pad.b, geom={x0,x1,y0,y1};
+  const dt=sim.dt, n=(sim.V?sim.V.length:sim.I.length), tMax=n*dt;
+  const sx=t=>x0+(t/tMax)*(x1-x0);
   // test-window shading
   if(!opt.mini && sim.test_start!=null){
     x.save();x.globalAlpha=.08;x.fillStyle=gcs('--phosphor');
-    x.fillRect(sx(sim.test_start*sim.dt),y0,x1-sx(sim.test_start*sim.dt),y1-y0);x.restore();
+    x.fillRect(sx(sim.test_start*dt),y0,x1-sx(sim.test_start*dt),y1-y0);x.restore();
   }
+  if(opt.currentOnly){                             // preview: current command is the whole story
+    if(!opt.mini){ x.strokeStyle=gcs('--scope-grid');x.globalAlpha=.5;x.lineWidth=1;
+      x.beginPath();x.moveTo(x0,y1);x.lineTo(x1,y1);x.stroke();x.globalAlpha=1;
+      x.fillStyle=gcs('--phosphor-dim');x.font="10px ui-monospace,monospace";x.textAlign="right";x.fillText(Math.round(tMax)+" ms",x1,y1+15); }
+    drawCurrent(x,geom,sim.I,dt,{main:true,mini:opt.mini}); return;
+  }
+  // voltage grid + axis
+  const vLo=-95,vHi=55, sy=v=>y1-((v-vLo)/(vHi-vLo))*(y1-y0);
   x.strokeStyle=gcs('--scope-grid');x.lineWidth=1;x.globalAlpha=opt.mini?.5:.7;
   if(!opt.mini){
-    x.beginPath();
-    for(const v of [-80,-40,0,40]){const yy=sy(v);x.moveTo(x0,yy);x.lineTo(x1,yy);}
-    x.stroke();
+    x.beginPath();for(const v of [-80,-40,0,40]){const yy=sy(v);x.moveTo(x0,yy);x.lineTo(x1,yy);}x.stroke();
     x.globalAlpha=1;x.fillStyle=gcs('--phosphor-dim');x.font="10px ui-monospace,monospace";x.textAlign="right";
     for(const v of [-80,0,40]) x.fillText(v,x0-4,sy(v)+3);
     x.textAlign="left";x.fillText("mV",4,y0+6);
     x.textAlign="right";x.fillText(Math.round(tMax)+" ms",x1,y1+15);
   } else x.stroke();
   x.globalAlpha=1;
+  if(sim.I && !opt.mini) drawCurrent(x,geom,sim.I,dt,{main:false});   // faint current overlay
   const col=opt.color||gcs('--phosphor');
   x.strokeStyle=col;x.lineWidth=opt.mini?1.2:1.7;x.lineJoin="round";x.shadowColor=col;x.shadowBlur=opt.mini?3:7;
   x.beginPath();
   const step=Math.max(1,Math.floor(n/(x1-x0)/2));
-  for(let i=0;i<n;i+=step){const xx=sx(i*sim.dt),yy=sy(sim.V[i]);i===0?x.moveTo(xx,yy):x.lineTo(xx,yy);}
+  for(let i=0;i<n;i+=step){const xx=sx(i*dt),yy=sy(sim.V[i]);i===0?x.moveTo(xx,yy):x.lineTo(xx,yy);}
   x.stroke();x.shadowBlur=0;
 }
 function placeholder(cv){
@@ -489,11 +524,12 @@ function renderWorldGrid(){
 
 /* bench */
 function stimPreview(){
-  const sim=runProto(PLAIN, curSegments(), []); // preview shape only (not the true cell)
-  const dt=sim.dt, n=sim.V.length; const flat={V:new Float32Array(n).fill(-65), dt, test_start:sim.test_start};
+  const {I,test_start}=buildI(curSegments());     // the actual injected current command
   $("#scope-title").textContent="Protocol preview"; $("#scope-sub").innerHTML=settingChips(curLabel(),state.block)+' <span class="chip" style="opacity:.7">not yet run</span>';
-  bigDraw(flat, gcs('--cyan'));
-  $("#readout").innerHTML='<span class="hint">Run to measure n_test</span>';
+  const cv=$("#scope"),r=Math.min(devicePixelRatio||1,2),W=cv.clientWidth,H=cv.clientHeight;
+  cv.width=W*r;cv.height=H*r;const x=cv.getContext("2d");x.scale(r,r);
+  drawTrace(x,W,H,{I,dt:0.01,test_start},{currentOnly:true});
+  $("#readout").innerHTML='<span class="hint">This is the current you will inject. Run to measure n_test (the scored spike count).</span>';
   updateLock();
 }
 function matchesTest(){ return world()._test.some(s=> JSON.stringify(s.seg)===JSON.stringify(curSegments()) && state.block.length===0 ); }
@@ -521,6 +557,12 @@ function updateBudget(){
   updateLock();
 }
 
+/* the menu protocol that best exposes this world (plain vs hidden differ most) -- always selectable */
+function menuDiscriminator(){
+  const alt=world().alt; let best=POOL[0][0], bd=-1;
+  POOL.forEach(p=>{const d=Math.abs(runProto(alt,p[1],[]).cnt-runProto(PLAIN,p[1],[]).cnt); if(d>bd){bd=d;best=p[0];}});
+  return {label:best, diff:bd};
+}
 /* verdict: identify the mechanism */
 function renderChoices(){
   const box=$("#choices");box.innerHTML="";
@@ -528,10 +570,10 @@ function renderChoices(){
     const b=document.createElement("button");b.textContent=lab;
     b.addEventListener("click",()=>{
       decided=true;
-      const correct=isNovel; // truth is always the novel alternative
-      const w=world();
+      const correct=isNovel; // the true cell is always the world's novel alternative
+      const w=world(), md=menuDiscriminator();
       $("#verdict").className="verdict show";
-      $("#verdict").innerHTML=`<h3>Revealed</h3><p>${correct?'<span class="em">Correct.</span>':'Not quite.'} This cell is <b>${WORLD_NAMES[cellIdx]}</b>: ${w.blurb}. The discriminating protocol is “${w.disc[0]}”.</p>`;
+      $("#verdict").innerHTML=`<h3>Revealed</h3><p>${correct?'<span class="em">Correct.</span>':'Not quite &mdash;'} this cell is <b>${WORLD_NAMES[cellIdx]}</b>: ${w.blurb}. In the menu, the protocol that exposes it is <b>&ldquo;${md.label}&rdquo;</b> — there the hidden current shifts the count by ${md.diff} spikes, while textbook steps look identical.</p>`;
     });
     box.appendChild(b);
   });
