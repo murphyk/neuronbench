@@ -22,10 +22,28 @@ def test_deterministic_revelation_and_silence():
             assert w.simulate(plain, brief) == w.simulate(alt, brief), name
 
 
-def test_perfect_forecast_is_zero():
+def test_perfect_spike_forecast_is_zero():
     w = nb.load_world("ca_rebound", stochastic=False, seed=0)
-    # a perfect forecaster (submitting the true held-out counts) scores 0 on the single metric
-    assert w.forecast_mse(nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
+    # a perfect forecaster (submitting the true held-out counts) scores 0 on the headline metric
+    assert w.spike_forecast_mse(nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
+    assert w.forecast_mse is w.spike_forecast_mse or \
+        w.forecast_mse(nb.evaluator.held_out_targets("ca_rebound", stochastic=False, seed=0)) == 0.0
+
+
+def test_feature_forecast_perfect_beats_empty():
+    """The secondary feature metric: forecasting the TRUE trace scores ~0; an empty/zero trace (an LLM
+    that cannot predict a trajectory) is penalised, not excused."""
+    from neuronbench import worlds as W
+    w = nb.load_world("h_sag", stochastic=False, seed=0)
+    truth = w._truth_kwargs
+    perfect, empty = {}, {}
+    for lab, seg in w.test_protocols:
+        I, ts = W.build_I(seg)
+        _, V = W.simulate(I, ts, **truth, trace=True)
+        perfect[lab] = V            # exact predicted trace
+        empty[lab] = []             # LLM: no trajectory
+    assert w.feature_forecast_mse(perfect) < 1e-6
+    assert w.feature_forecast_mse(empty) > w.feature_forecast_mse(perfect)
 
 
 def test_problem_is_leak_free():

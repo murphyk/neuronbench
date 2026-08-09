@@ -171,16 +171,28 @@ class World:
         return Observation(lab, float(cnt), reps, reps, voltage=V[idx].astype(float),
                            obs_idx=idx, test_start=int(np.searchsorted(idx, ts)))
 
-    # -- evaluation (a single open-ended metric) --
-    def forecast_mse(self, predicted_test_counts, floor=evaluator.MSE_FLOOR):
-        """The benchmark's sole metric: floored MSE of the agent's predicted held-out test-window spike
-        counts (a {label: count} dict over ``test_protocol_labels``) against the true cell. Fully
-        open-ended -- the agent may reach it with any model form -- and it doubles as the model-recovery
-        score, since the held-out test protocols are the discriminating regime: only a model that
-        recovered the mechanism forecasts them well."""
+    # -- evaluation --
+    # The task is counterfactual trajectory forecasting: for each held-out protocol the agent predicts a
+    # spike count AND a voltage trace. Two metrics score the two levels. spike_forecast_mse (headline;
+    # both LLM and model-based agents produce it) is what the plots compare; feature_forecast_mse
+    # (secondary; for model-based deep-dives) rewards trajectory SHAPE that a scalar count discards, and
+    # an agent that cannot forecast a trace (e.g. an LLM) is penalised on it rather than excused.
+    def spike_forecast_mse(self, predicted_test_counts, floor=evaluator.MSE_FLOOR):
+        """HEADLINE metric: floored MSE of the agent's predicted held-out test-window spike counts (a
+        {label: count} dict over ``test_protocol_labels``) against the true cell."""
         targets = evaluator.held_out_targets(self.name, stochastic=self.stochastic,
                                              N=self.n_channels, seed=self.seed)
         return evaluator.forecast_mse(predicted_test_counts, targets, floor=floor)
+
+    def feature_forecast_mse(self, predicted_test_traces):
+        """SECONDARY metric: standardised MSE between the benchmark's eval-feature vector of the agent's
+        predicted held-out voltage traces (a {label: 1-D voltage array} dict) and the true cell's, over
+        protocols and features. The benchmark extracts the features; agents forecast raw traces."""
+        return evaluator.feature_forecast_mse(predicted_test_traces, self.name,
+                                              stochastic=self.stochastic, N=self.n_channels, seed=self.seed)
+
+    # backward-compatible alias for the headline metric
+    forecast_mse = spike_forecast_mse
 
 
 def load_world(name, stochastic=True, n_channels=100.0, seed=0):

@@ -86,26 +86,24 @@ design: running a protocol `r` times costs `r` units and averages the channel no
 
 ## Evaluation criteria — fully open-ended
 
-The task is **open-ended**: the agent is given only an opaque prior (a plain Na+K spiker that *may*
-also involve one novel current of unknown identity), the reference plain model, the design pool, and a
-budget. It runs experiments, then **proposes its own hypotheses**, returns a posterior `p(m | D)` over
-them, and forecasts. It is **never told the true mechanism, nor that there are exactly two hypotheses**
-(`world.problem()` is the leak-free spec; the truth is private). It is scored by:
+The task is **counterfactual trajectory forecasting**, open-ended: the agent is given only an opaque
+prior (a plain Na+K spiker that *may* also involve one novel current of unknown identity), the reference
+plain model, the design pool, and a budget. It runs experiments, then **proposes its own hypotheses**
+and **forecasts the cell's response to held-out interventions** — for each, a predicted spike count and
+a predicted voltage trace. It is **never told the true mechanism, nor that there are exactly two
+hypotheses** (`world.problem()` is the leak-free spec; the truth is private). Two metrics score the two
+levels of the forecast:
 
-1. **Held-out interventional forecast MSE** *(primary)* — `world.forecast_mse({label: count})` over
-   **test protocols never run**. Floored at 0.25 so irreducible ±0.5-spike noise is treated as exact.
-   Any model form is allowed; a method that recovered the mechanism forecasts interventions it never
-   observed, which a curve-fit to the observed data cannot.
-2. **Behavioural model recovery** — `world.recovery_mse({label: count})` over the **full pool**: how
-   close the agent's `argmax_m p(m|D)` model is to the true cell *behaviourally*. Near-zero means it
-   recovered the mechanism — the metric that lets an open-ended argmax model be compared to the truth
-   **without a shared model label**.
-3. **Latent detection** — `world.score_detection(agent_says_latent)`: did the agent correctly decide
-   whether a latent mechanism is present at all.
-
-The forecast metric is the one that matters: identifying the mechanism is only useful insofar as it
-lets you predict interventions. A data-efficient discovery method reaches a low `forecast_mse` from
-**few** experiments.
+1. **`spike_forecast_mse`** *(headline)* — floored MSE of the predicted held-out test-window spike
+   counts vs. the true cell. Both LLM and model-based agents can produce it, so it is the comparable
+   number in the plots. Any model form is allowed; a method that recovered the mechanism forecasts
+   interventions it never observed, which a curve-fit to the observed data cannot.
+2. **`feature_forecast_mse`** *(secondary; model-based deep-dives)* — standardised MSE between the
+   benchmark's internal feature vector (spike counts **plus** sub-threshold shape: V-min, steady state,
+   run-down, adaptation) of the agent's **predicted voltage trace** and the true cell's. It rewards
+   trajectory *shape* that a scalar spike count discards. Features are the benchmark's *internal*
+   scoring device — **never given to agents**; agents forecast raw traces. An agent that cannot predict
+   a trajectory (an LLM) submits an empty trace and is penalised here, not excused.
 
 ```python
 import neuronbench as nb
@@ -116,10 +114,10 @@ spec  = world.problem()   # opaque prior + reference model + protocols + test la
 # ... the agent runs experiments (each consumes budget), proposes hypotheses, forms p(m|D) ...
 obs = world.run(world.discriminator(), reps=3)        # noisy, partial; costs 3
 
-# score it (open-ended: forecast is primary; recovery + detection are behavioural)
-mse = world.forecast_mse({lab: predicted_count for lab, _ in world.test_protocols})
-rec = world.recovery_mse({lab: predicted_count for lab, seg in spec["protocols"]})
-det = world.score_detection(agent_thinks_there_is_a_novel_current)
+# forecast each held-out intervention: a spike count (all agents) and a voltage trace (model-based)
+spike_mse = world.spike_forecast_mse({lab: predicted_count for lab, _ in world.test_protocols})  # headline
+feat_mse  = world.feature_forecast_mse({lab: predicted_trace for lab, _ in world.test_protocols}) # secondary
+# an LLM agent submits {lab: []} traces -> a (penalised) feature_forecast_mse, and competes on spike_mse
 ```
 
 `world.simulate(mechanism, protocol, block=...)` is the **forward model** a solver uses to score
