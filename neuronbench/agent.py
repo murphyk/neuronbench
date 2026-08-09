@@ -41,9 +41,9 @@ def choose_experiment(world, observed, remaining, client):
     `world` is a neuronbench.World; `remaining` is a list of (label, segments)."""
     labels = [lab for lab, _ in remaining]
     obs_txt = ("\n".join(f"  - {l} -> {c} spikes" for l, c in observed) if observed else "  (none yet)")
-    prompt = ("A single-compartment neuron under current clamp; we count action potentials per protocol. "
-              "It is a plain Na+K spiker, possibly plus one additional membrane current you must identify: "
-              f"{world.text_prior}.\n"
+    prompt = ("A neuron is recorded in current clamp; we count its action potentials per protocol. "
+              "Model it as a single-compartment conductance-based (Hodgkin-Huxley) neuron with voltage-gated "
+              "channels (Na, K, Ca, leak, and possibly others), and infer its mechanism from the data.\n"
               "Experiments run so far and their observed spike counts:\n" + obs_txt +
               "\n\nAvailable experiments (choose one; each may be run once):\n"
               + "\n".join(f"  - {lab}" for lab in labels)
@@ -67,9 +67,9 @@ def forecast_counts(world, observed, client):
     (or 0 if nothing observed)."""
     test = world.test_protocols
     obs_txt = ("\n".join(f"  - {l} -> {c} spikes" for l, c in observed) if observed else "  (none yet)")
-    prompt = ("A single-compartment neuron under current clamp; we count action potentials per protocol. "
-              "It is a plain Na+K spiker, possibly plus one additional membrane current of unknown identity: "
-              f"{world.text_prior}. "
+    prompt = ("A neuron is recorded in current clamp; we count its action potentials per protocol. "
+              "Model it as a single-compartment conductance-based (Hodgkin-Huxley) neuron with voltage-gated "
+              "channels (Na, K, Ca, leak, and possibly others). "
               "Experiments run and observed spike counts:\n" + obs_txt +
               "\n\nPredict the spike count for each held-out protocol:\n"
               + "\n".join(f"  {i+1}. {lab}" for i, (lab, _) in enumerate(test))
