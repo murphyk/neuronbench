@@ -4,9 +4,10 @@ A partially observed **single-neuron electrophysiology benchmark** for data-effi
 mechanism discovery. A neuron is patched on the bench; it implements one of a small set of
 biophysical mechanisms, but which one is hidden. From a **budget** of interventional
 experiments — current-clamp protocols and channel blockers, each returning a noisy, partial
-recording — an agent must (1) identify the mechanism and (2) **predict the outcome of
-interventions it never ran**. That second part, counterfactual interventional forecasting, is
-what the benchmark ultimately scores.
+recording — an agent must uncover enough of the mechanism to **predict the outcome of
+interventions it never ran**. That — counterfactual interventional forecasting — is what the
+benchmark scores; the agent is never asked to *name* the mechanism, and identifying it is only a
+means to a better forecast.
 
 NeuronBench ships in **deterministic** and **stochastic** (Fox–Lu channel-noise) forms, a zoo
 of Hodgkin–Huxley worlds, an intervention API under a hard budget, an evaluator, and a
@@ -28,10 +29,12 @@ spike).
 
 ### The worlds
 
-Each world is a plain Na⁺/K⁺/leak spiker **plus one extra mechanism**. The task is the
-two-hypothesis decision: *plain* vs. *plain + the world's mechanism*. Five of the six worlds
-are deliberately **hard**: the extra channel is **silent under every textbook probe** (plain
-and novel fire identically to standard steps and blockers) and is revealed **only by a single
+Each world is a plain Na⁺/K⁺/leak spiker **plus one hidden extra membrane current**. The agent is
+**not** told the candidate set — or even that there are exactly two hypotheses; it proposes its own
+mechanisms and is scored on what it *forecasts* (see
+[Evaluation](#evaluation-criteria--fully-open-ended)), not on picking from a menu. Five of the six
+worlds are deliberately **hard**: the extra channel is **silent under every textbook probe** (it fires
+identically to a plain cell under standard steps and blockers) and is revealed **only by a single
 non-textbook protocol**. The sixth is a recallable control.
 
 | world | hidden mechanism | revealed by |
@@ -186,7 +189,7 @@ neuronbench/
   features.py     # spike-count observables (the scored quantity)
   protocols.py    # current-clamp intervention API + budget rule
   blockers.py     # channel-blocker interventions (TTX / TEA / Cd / XE991)
-  evaluator.py    # mechanism selection + held-out forecast MSE
+  evaluator.py    # held-out forecast MSE — spike counts (headline) + trace features (secondary)
   agent.py        # reference pure-LLM baseline (injectable client)
 ```
 

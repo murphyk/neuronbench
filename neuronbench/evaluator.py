@@ -1,11 +1,19 @@
-"""Scoring for NeuronBench. Two axes, both pure metrics -- no inference lives here.
+"""Scoring for NeuronBench. Pure metrics -- no inference lives here.
 
-1. Mechanism selection: did the agent identify the true mechanism (0/1 accuracy), and how much
-   posterior mass did it place on the truth (a Brier score for the two-hypothesis decision)?
+The task is open-ended counterfactual interventional forecasting: on a disjoint set of test protocols the
+agent never ran, how well does it predict the true cell's response? Two metrics, at two levels of detail:
 
-2. Held-out interventional forecasting: on a disjoint set of test protocols the agent never ran, how
-   well does its predicted test-window spike count match the true cell's? Reported as a floored MSE,
-   so that irreducible count noise does not dominate.
+1. ``spike_forecast_mse`` (headline): floored MSE of the predicted test-window spike count vs. the true
+   cell. Any agent -- LLM or model-based -- can produce it, so it is the comparable number in the plots.
+   The floor keeps irreducible count noise from dominating.
+
+2. ``feature_forecast_mse`` (secondary): standardised MSE between a feature vector of the agent's predicted
+   voltage trace and the true cell's -- spike counts plus sub-threshold shape (V-min, steady state,
+   run-down, adaptation). It rewards trajectory shape that a scalar spike count discards.
+
+(Earlier mechanism-selection conveniences -- a 0/1 identification accuracy and a two-hypothesis Brier
+score -- were removed: the benchmark is open-ended and scores what the agent *forecasts*, not whether it
+names the truth.)
 """
 from __future__ import annotations
 
