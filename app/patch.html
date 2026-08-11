@@ -48,7 +48,7 @@
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
   .panel-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 16px 0}
   .panel-h h2{font-size:14px;letter-spacing:.01em}
-  .panel-h .sub{color:var(--ink-3);font-size:12px}
+  .panel-h .sub{color:var(--ink-2);font-size:12px}
   .transduction{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
   @media(max-width:820px){.transduction{grid-template-columns:1fr}}
   .cards{display:flex;flex-direction:column;gap:11px;padding:13px 16px 16px}
@@ -117,9 +117,10 @@
   .lockbar b{color:var(--ink)}
   .predrow{display:flex;gap:8px;margin-top:2px;align-items:center}
   .pfield{display:flex;flex-direction:column;line-height:1.2}
-  .pfield .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  .pfield .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
   .pfield input{width:52px;font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:3px 5px;color:var(--ink);text-align:right}
   .pfield input:focus{border-color:var(--cyan);outline:none}
+  .pfield input::placeholder{color:var(--ink-2);opacity:1}   /* the "?" — brighter, easier to read */
   .score{font-family:var(--mono);font-size:11px;margin-top:4px}
   .score.good{color:var(--phosphor)}.score.mid{color:var(--amber)}.score.bad{color:var(--danger)}
   .cmp{display:flex;gap:16px;align-items:baseline;font-family:var(--mono)}
@@ -467,7 +468,7 @@ function placeholder(cv){
   const r=Math.min(devicePixelRatio||1,2),W=cv.clientWidth,H=cv.clientHeight;
   cv.width=W*r;cv.height=H*r;const x=cv.getContext("2d");x.scale(r,r);
   x.fillStyle=gcs('--scope');x.fillRect(0,0,W,H);
-  x.fillStyle=gcs('--phosphor-dim');x.font="600 20px ui-monospace,monospace";x.textAlign="center";x.textBaseline="middle";
+  x.fillStyle=gcs('--phosphor');x.font="600 20px ui-monospace,monospace";x.textAlign="center";x.textBaseline="middle";
   x.fillText("?",W/2,H/2);
 }
 
