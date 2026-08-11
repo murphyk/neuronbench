@@ -62,6 +62,7 @@
   .chip{font-family:var(--mono);font-size:11px;background:var(--chip);color:var(--chip-ink);border-radius:6px;padding:2px 7px;white-space:nowrap}
   .chip.do{background:color-mix(in srgb,var(--amber) 22%,transparent);color:var(--amber)}
   :root[data-theme="light"] .chip.do{color:#a5620c}
+  .chip.proto{white-space:normal}   /* long protocol names wrap instead of overflowing */
   .feats{display:flex;gap:14px;flex-wrap:wrap}
   .feat{display:flex;flex-direction:column;line-height:1.25}
   .feat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
@@ -387,9 +388,30 @@ function curLabel(){ return state.proto<0 ? `custom (${state.amp} µA, ${state.d
 /* ==================== rendering ==================== */
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 function settingChips(label, block){
-  const chips=[`<span class="chip">${label}</span>`];
+  const chips=[`<span class="chip proto">${label}</span>`];
   (block||[]).forEach(b=>chips.push(`<span class="chip do">do: ${b}</span>`));
   return chips.join("");
+}
+// menu-style description of a protocol's segments; reuse the exact menu name when the protocol is in the pool
+function describe(seg){
+  const hit=POOL.find(p=>JSON.stringify(p[1])===JSON.stringify(seg));
+  if(hit) return hit[0];
+  if(seg.length===1){ const [d,a]=seg[0]; return `step (${a} µA, ${d} ms)`; }
+  if(seg.length===2){ const [d1,a1]=seg[0], [,a2]=seg[1];
+    if(a1<0 && a2>0)  return `hyperpol conditioning → depol test (${a1} µA/${d1} ms, then +${a2} µA)`;
+    if(a1<0 && a2===0) return `hyperpol step → release (${a1} µA/${d1} ms → rebound)`;
+    if(a1>0 && a2>0)  return `depol conditioning → test (+${a1} µA/${d1} ms, then +${a2} µA)`; }
+  if(seg.length===3){ const [d1,a1]=seg[0], [,a2]=seg[1], [d3,a3]=seg[2];
+    if(a1<0 && a2===0 && a3>0) return `hyperpol pre-pulse, gap, test (${a1} µA/${d1} ms → rest → +${a3} µA)`;
+    if(a1>0 && a2===0 && a3>0) return `paired pulses (+${a1} µA/${d1} ms, gap, +${a3} µA/${d3} ms)`; }
+  return seg.map(([d,a])=>`${a>0?'+':''}${a}/${d}`).join(', ');
+}
+// mini icon of the injected current command (the pulse shape) for a card
+function miniStim(cv, seg){
+  const {I,test_start}=buildI(seg);
+  const r=Math.min(devicePixelRatio||1,2),W=cv.clientWidth,H=cv.clientHeight;
+  cv.width=W*r;cv.height=H*r;const x=cv.getContext("2d");x.scale(r,r);
+  drawTrace(x,W,H,{I,dt:0.01,test_start},{currentOnly:true,mini:true});
 }
 function featCells(f, hidden){
   const items=[["n_test", hidden?"?":f.nTest, true],["n_pre", hidden?"?":f.nPre,false],
@@ -456,7 +478,7 @@ function drawTrace(x,W,H,sim,opt){
     x.textAlign="right";x.fillText(Math.round(tMax)+" ms",x1,y1+15);
   } else x.stroke();
   x.globalAlpha=1;
-  if(sim.I && !opt.mini) drawCurrent(x,geom,sim.I,dt,{main:false});   // faint current overlay
+  if(sim.I) drawCurrent(x,geom,sim.I,dt,{main:false,mini:opt.mini});   // faint current overlay (shows the input pulse)
   const col=opt.color||gcs('--phosphor');
   x.strokeStyle=col;x.lineWidth=opt.mini?1.2:1.7;x.lineJoin="round";x.shadowColor=col;x.shadowBlur=opt.mini?3:7;
   x.beginPath();
@@ -495,7 +517,7 @@ function makeTest(spec){
     el.innerHTML=`<canvas></canvas><div class="meta"><div class="setting">${settingChips(spec.label,[])}</div>
       <div class="predrow"><div class="pfield"><span class="k">forecast n_test</span><input inputmode="numeric" placeholder="?"></div>
       <button class="reveal mini" style="padding:5px 9px">score →</button></div></div><span class="tag">predict</span>`;
-    requestAnimationFrame(()=>placeholder(el.querySelector("canvas")));
+    requestAnimationFrame(()=>miniStim(el.querySelector("canvas"), spec.seg));
     const inp=el.querySelector("input"), btn=el.querySelector("button");
     const submit=()=>{ const p=parseInt(inp.value,10); if(Number.isNaN(p))return;
       spec._pred=p; const err=Math.abs(p-truth); spec._score=Math.round(100*Math.max(0,1-err/6)); spec._done=true; renderTest(); };
@@ -618,7 +640,7 @@ function resetCell(advance){
   // training: two TEXTBOOK steps only -- under these the novel channel is silent (plain === alt), so the
   // player must DISCOVER the revealing protocol from the menu. That is the benchmark's whole thesis.
   w._train=[{label:TEXTBOOK[0][0], seg:TEXTBOOK[0][1]}, {label:TEXTBOOK[1][0], seg:TEXTBOOK[1][1]}];
-  w._test=w.test.map(t=>({label:t[0], seg:t[1]}));
+  w._test=w.test.map(t=>({label:describe(t[1]), seg:t[1]}));
   updateBudget(); renderTrain(); renderTest();
   $("#log").innerHTML='<p class="hint" style="padding:0 0 4px">No experiments run yet.</p>';
   $("#verdict").className="verdict"; $("#verdict").innerHTML='<h3>Your call</h3><p>Probe the cell, then decide: is there a hidden current?</p><div class="choices" id="choices"></div>';
