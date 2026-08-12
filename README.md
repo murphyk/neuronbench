@@ -13,6 +13,10 @@ NeuronBench ships in **deterministic** and **stochastic** (Fox–Lu channel-nois
 of Hodgkin–Huxley worlds, an intervention API under a hard budget, an evaluator, and a
 **reference baseline LLM agent**.
 
+**Paper:** NeuronBench is introduced in *Model Discovery Agent: LLM-assisted Bayesian experiment
+design for data-efficient discovery of mechanistic world models* —
+[arxiv.org/abs/2608.09696](https://arxiv.org/abs/2608.09696).
+
 ### Interactive demo
 
 **[Patch](https://claude.ai/code/artifact/2848d02d-cdc1-4c1c-99fe-c0034e9714fb)** — a playable
